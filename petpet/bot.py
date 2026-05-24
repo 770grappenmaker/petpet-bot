@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Any
 from mautrix.client import ClientAPI
 import PIL.ImageOps
 from io import BytesIO
@@ -120,9 +120,8 @@ class PetBot(Plugin):
 
         await self.petpet_from_url(evt, content.url)
 
-    async def petpet_user(self, evt: MessageEvent, user: tuple[str, str]):
-        mxid: UserID = "@" + ":".join(user)
-        avatar_url = await self.client.get_avatar_url(mxid)
+    async def petpet_user(self, evt: MessageEvent, user: str):
+        avatar_url = await self.client.get_avatar_url(user)
 
         if avatar_url is None:
             await evt.reply("User does not have an avatar!")
@@ -131,18 +130,32 @@ class PetBot(Plugin):
         await self.petpet_from_url(evt, avatar_url)
 
     @command.new()  # ty:ignore[call-non-callable]
-    @command.argument("user", required=False, parser=lambda val: ClientAPI.parse_user_id(val) if val else None) # ty:ignore[call-non-callable]
-    async def petpet(self, evt: MessageEvent, user: Optional[tuple[str, str]]) -> None:
+    @command.argument("user", required=False)
+    async def petpet(self, evt: MessageEvent, user: str | None) -> None:
+        mentions: dict[str, Any] = evt.content.get("m.mentions", dict())
+        user_ids: list[str] = mentions.get('user_ids', [])
+
+        if user is not None:
+            if len(user_ids) > 0:
+                await self.petpet_user(evt, user_ids[0])
+                return
+
+            try:
+                ClientAPI.parse_user_id(user)
+            except ValueError as e:
+                await evt.reply("Could not parse user (mention / mxid)")
+                return
+
+            await self.petpet_user(evt, user)
+
+            return
+
         reply_event_id = evt.content.get_reply_to()
         if reply_event_id:
             await self.petpet_reply(evt, reply_event_id)
             return
 
-        if user is None:
-            await evt.reply("Either reply to media, or mention a users' mxid!")
-            return
-
-        await self.petpet_user(evt, user)
+        await evt.reply("Either reply to media, or mention a users' mxid!")
 
         
 
