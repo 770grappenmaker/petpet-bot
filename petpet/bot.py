@@ -1,16 +1,16 @@
+from typing import Optional
+from mautrix.client import ClientAPI
 import PIL.ImageOps
 from io import BytesIO
 import PIL.Image
 from PIL.Image import Image
-from mautrix.types import MediaMessageEventContent, MessageType
+from mautrix.types import MediaMessageEventContent, MessageType, EventID, ContentURI, UserID
 from maubot import Plugin, MessageEvent
 from maubot.handlers import command
 import warnings
+from .parameters import BASELINE, DURATION, SQUISHINESS
 
 warnings.simplefilter("error", PIL.Image.DecompressionBombWarning)
-
-SQUISHINESS = .7
-DURATION = 25
 
 class PetBot(Plugin):
     async def start(self):
@@ -45,7 +45,7 @@ class PetBot(Plugin):
             t *= 2
 
             squish = t * (1 - SQUISHINESS)
-            squished_height = round(target_height * (1 - squish))
+            squished_height = round(target_height * (1 - squish) * BASELINE)
             squish_y = target_height - squished_height
 
             squished = fitted.resize(
@@ -71,34 +71,8 @@ class PetBot(Plugin):
         result.seek(0)
         return result
 
-    @command.new()  # ty:ignore[call-non-callable]
-    async def petpet(self, evt: MessageEvent) -> None:
-        reply_event_id = evt.content.get_reply_to()
-        if not reply_event_id:
-            await evt.reply("Reply to an image!")
-            return
-
-        reply_event = await self.client.get_event(evt.room_id, reply_event_id)
-
-        if not isinstance(reply_event, MessageEvent):
-            await evt.reply("Reply to a message, not any other event!")
-            return
-
-        if not isinstance(reply_event.content, MediaMessageEventContent):
-            await evt.respond("The replied to message must contain media!")
-            return
-
-        content = reply_event.content
-
-        if content.msgtype != MessageType.IMAGE:
-            await evt.reply("The replied to message had unexpected non-image media!")
-            return
-
-        if not content.url:
-            await evt.reply("URLless media, how is this possible?")
-            return
-
-        image_bytes = await self.client.download_media(content.url)
+    async def petpet_from_url(self, evt: MessageEvent, url: ContentURI) -> None:
+        image_bytes = await self.client.download_media(url)
         try:
             with BytesIO(image_bytes) as io:
                 image = PIL.Image.open(io)
@@ -122,4 +96,54 @@ class PetBot(Plugin):
         except Exception as e:
             self.log.exception(e)
             await evt.reply("Failed to create petpet")
+
+    async def petpet_reply(self, evt: MessageEvent, reply_event_id: EventID) -> None:
+        reply_event = await self.client.get_event(evt.room_id, reply_event_id)
+
+        if not isinstance(reply_event, MessageEvent):
+            await evt.reply("Reply to a message, not any other event!")
             return
+
+        if not isinstance(reply_event.content, MediaMessageEventContent):
+            await evt.respond("The replied to message must contain media!")
+            return
+
+        content = reply_event.content
+
+        if content.msgtype != MessageType.IMAGE:
+            await evt.reply("The replied to message had unexpected non-image media!")
+            return
+
+        if not content.url:
+            await evt.reply("URLless media, how is this possible?")
+            return
+
+        await self.petpet_from_url(evt, content.url)
+
+    async def petpet_user(self, evt: MessageEvent, user: tuple[str, str]):
+        mxid: UserID = "@" + ":".join(user)
+        avatar_url = await self.client.get_avatar_url(mxid)
+
+        if avatar_url is None:
+            await evt.reply("User does not have an avatar!")
+            return
+
+        await self.petpet_from_url(evt, avatar_url)
+
+    @command.new()  # ty:ignore[call-non-callable]
+    @command.argument("user", required=False, parser=lambda val: ClientAPI.parse_user_id(val) if val else None) # ty:ignore[call-non-callable]
+    async def petpet(self, evt: MessageEvent, user: Optional[tuple[str, str]]) -> None:
+        reply_event_id = evt.content.get_reply_to()
+        if reply_event_id:
+            await self.petpet_reply(evt, reply_event_id)
+            return
+
+        if user is None:
+            await evt.reply("Either reply to media, or mention a users' mxid!")
+            return
+
+        await self.petpet_user(evt, user)
+
+        
+
+        

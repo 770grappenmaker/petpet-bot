@@ -3,7 +3,7 @@ id: nl.koenoostveen.petpet
 version: 0.1.0
 license: Unlicense
 modules:
-  - petpet-bot
+  - petpet
 main_class: PetBot
 extra_files:
   - frames/*
