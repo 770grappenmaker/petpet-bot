@@ -5,3 +5,5 @@ license: Unlicense
 modules:
   - petpet-bot
 main_class: PetBot
+extra_files:
+  - frames/*

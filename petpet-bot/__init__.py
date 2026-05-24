@@ -1,3 +1,4 @@
+import PIL.ImageOps
 from io import BytesIO
 import PIL.Image
 from PIL.Image import Image
@@ -8,16 +9,17 @@ import warnings
 
 warnings.simplefilter("error", PIL.Image.DecompressionBombWarning)
 
+SQUISHINESS = .7
+DURATION = 25
 
 class PetBot(Plugin):
-    frames: list[Image] = []
-
     async def start(self):
+        self.frames: list[Image] = []
         frames_list = await self.loader.list_files("frames")
 
         for frame_path in sorted(frames_list):
             frame_bytes = await self.loader.read_file(frame_path)
-            image = PIL.Image.open(BytesIO(frame_bytes))
+            image = PIL.Image.open(BytesIO(frame_bytes)).convert("RGBA")
             self.frames.append(image)
 
     async def stop(self):
@@ -26,18 +28,47 @@ class PetBot(Plugin):
 
         self.frames = []
 
-    async def create_petpet(self, image: Image) -> BytesIO:
-        copies = [frame.copy() for frame in self.frames]
+    def create_petpet(self, image: Image) -> BytesIO:
+        image = image.convert("RGBA")
+        target_width, target_height = self.frames[0].size
+        fitted = PIL.ImageOps.fit(image, (target_width, target_height))
+
+        result_frames = []
+
+        for i, petpet_frame in enumerate(self.frames):
+            next_frame = PIL.Image.new("RGBA", (target_width, target_height))
+
+            t = i / len(self.frames)
+            if t >= .5:
+                t = 1 - t
+            
+            t *= 2
+
+            squish = t * (1 - SQUISHINESS)
+            squished_height = round(target_height * (1 - squish))
+            squish_y = target_height - squished_height
+
+            squished = fitted.resize(
+                (target_width, squished_height),
+                PIL.Image.Resampling.LANCZOS,
+            )
+
+            next_frame.paste(squished, (0, squish_y))
+            next_frame.alpha_composite(petpet_frame)
+            result_frames.append(next_frame)
+
         result = BytesIO()
-        copies[0].save(
+        result_frames[0].save(
             result,
             format="gif",
             save_all=True,
-            append_images=copies[1:],
-            duration=100,
+            append_images=result_frames[1:],
+            duration=DURATION,
             loop=0,
+            disposal=2
         )
         
+        result.seek(0)
         return result
 
     @command.new()  # ty:ignore[call-non-callable]
@@ -72,14 +103,23 @@ class PetBot(Plugin):
             with BytesIO(image_bytes) as io:
                 image = PIL.Image.open(io)
                 image.load()
-        except:
+        except Exception as e:
+            self.log.exception(e)
             await evt.reply("Failed to load media")
             return
 
         try:
-            with await self.create_petpet(image) as out_io:
-                mxc = await self.client.upload_media(out_io.read(), mime_type="image/png", filename="petpet.png")
-                await self.client.send_image(room_id=evt.room_id, url=mxc, file_name="petpet.png")
-        except:
+            with self.create_petpet(image) as out_io:
+                uploading_bytes = out_io.read()
+                if len(uploading_bytes) <= 0:
+                    self.log.error("Trying to upload an empty image")
+                    await evt.reply("Internal error occurred")
+                    return
+
+                mxc = await self.client.upload_media(uploading_bytes, mime_type="image/gif", filename="petpet.gif")
+                await self.client.send_image(room_id=evt.room_id, url=mxc, file_name="petpet.gif")
+
+        except Exception as e:
+            self.log.exception(e)
             await evt.reply("Failed to create petpet")
             return
