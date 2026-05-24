@@ -1,0 +1,7 @@
+maubot: 0.1.0
+id: nl.koenoostveen.petpet
+version: 0.1.0
+license: Unlicense
+modules:
+  - petpet-bot
+main_class: PetBot

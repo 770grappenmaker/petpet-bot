@@ -1,0 +1,8 @@
+[project]
+name = "wg-bot"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "maubot>=0.6.0",
+    "pillow>=12.2.0",
+]
