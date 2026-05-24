@@ -1,14 +1,17 @@
-from typing import Optional, Any
+from typing import Optional, Any, cast
 from mautrix.client import ClientAPI
 import PIL.ImageOps
 from io import BytesIO
 import PIL.Image
 from PIL.Image import Image
-from mautrix.types import MediaMessageEventContent, MessageType, EventID, ContentURI, UserID
+from mautrix.types import MediaMessageEventContent, MessageType, EventID, ContentURI, TextMessageEventContent
 from maubot import Plugin, MessageEvent
 from maubot.handlers import command
 import warnings
 from .parameters import BASELINE, DURATION, SQUISHINESS
+import re
+
+MATRIX_TO_REGEX = re.compile("""https?:\/\/matrix.to\/#\/(@[A-Za-z0-9_]+:[A-Za-z0-9_.]+)""")
 
 warnings.simplefilter("error", PIL.Image.DecompressionBombWarning)
 
@@ -142,11 +145,16 @@ class PetBot(Plugin):
 
             try:
                 ClientAPI.parse_user_id(user)
-            except ValueError as e:
-                await evt.reply("Could not parse user (mention / mxid)")
+                await self.petpet_user(evt, user)
+            except ValueError:
+                pass
+
+            matches = MATRIX_TO_REGEX.findall(cast(TextMessageEventContent, evt.content).formatted_body)
+            if len(matches) == 0:
+                await evt.reply("Sorry, that does not look like a valid user!")
                 return
 
-            await self.petpet_user(evt, user)
+            await self.petpet_user(evt, matches[0])
 
             return
 
