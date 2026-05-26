@@ -138,7 +138,7 @@ class PetBot(Plugin):
         mentions: dict[str, Any] = evt.content.get("m.mentions", dict())
         user_ids: list[str] = mentions.get('user_ids', [])
 
-        if user is not None:
+        if user is not None and len(user.strip()) > 0:
             if len(user_ids) > 0:
                 await self.petpet_user(evt, user_ids[0])
                 return
