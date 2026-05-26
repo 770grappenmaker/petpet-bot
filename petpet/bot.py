@@ -135,27 +135,26 @@ class PetBot(Plugin):
     @command.new()  # ty:ignore[call-non-callable]
     @command.argument("user", required=False)
     async def petpet(self, evt: MessageEvent, user: str | None) -> None:
-        mentions: dict[str, Any] = evt.content.get("m.mentions", dict())
-        user_ids: list[str] = mentions.get('user_ids', [])
-
         if user is not None and len(user.strip()) > 0:
-            if len(user_ids) > 0:
-                await self.petpet_user(evt, user_ids[0])
-                return
-
             try:
                 ClientAPI.parse_user_id(user)
                 await self.petpet_user(evt, user)
+                return
             except ValueError:
                 pass
 
             matches = MATRIX_TO_REGEX.findall(cast(TextMessageEventContent, evt.content).formatted_body)
-            if len(matches) == 0:
-                await evt.reply("Sorry, that does not look like a valid user!")
+            if len(matches) != 0:
+                await self.petpet_user(evt, matches[0])
                 return
 
-            await self.petpet_user(evt, matches[0])
+            mentions: dict[str, Any] = evt.content.get("m.mentions", dict())
+            user_ids: list[str] = mentions.get('user_ids', [])
+            if len(user_ids) > 0:
+                await self.petpet_user(evt, user_ids[0])
+                return
 
+            await evt.reply("Sorry, that does not look like a valid user!")
             return
 
         reply_event_id = evt.content.get_reply_to()
