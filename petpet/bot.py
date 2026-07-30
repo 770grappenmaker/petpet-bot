@@ -1,17 +1,18 @@
+from mautrix.types.event.type import EventType
 from typing import Optional, Any, cast
 from mautrix.client import ClientAPI
 import PIL.ImageOps
 from io import BytesIO
 import PIL.Image
 from PIL.Image import Image
-from mautrix.types import MediaMessageEventContent, MessageType, EventID, ContentURI, TextMessageEventContent
+from mautrix.types import MediaMessageEventContent, MessageType, EventID, ContentURI, TextMessageEventContent, MemberStateEventContent
 from maubot import Plugin, MessageEvent
 from maubot.handlers import command
 import warnings
 from .parameters import BASELINE, DURATION, SQUISHINESS
 import re
 
-MATRIX_TO_REGEX = re.compile("""https?:\/\/matrix.to\/#\/(@[A-Za-z0-9_]+:[A-Za-z0-9_.]+)""")
+MATRIX_TO_REGEX = re.compile("""https?://matrix.to/#/(@[A-Za-z0-9_]+:[A-Za-z0-9_.]+)""")
 
 warnings.simplefilter("error", PIL.Image.DecompressionBombWarning)
 
@@ -124,7 +125,11 @@ class PetBot(Plugin):
         await self.petpet_from_url(evt, content.url)
 
     async def petpet_user(self, evt: MessageEvent, user: str):
-        avatar_url = await self.client.get_avatar_url(user)
+        member_state: MemberStateEventContent | None = cast(MemberStateEventContent | None, await self.client.get_state_event(evt.room_id, EventType.ROOM_MEMBER, user))
+        if member_state is None:
+            avatar_url = await self.client.get_avatar_url(user)  # ty:ignore[invalid-argument-type]
+        else:
+            avatar_url = member_state.avatar_url
 
         if avatar_url is None:
             await evt.reply("User does not have an avatar!")
